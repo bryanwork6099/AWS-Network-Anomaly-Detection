@@ -1,367 +1,312 @@
+<div align="center">
+
 # AWS Network Anomaly Detection
 
-A cloud-native network traffic monitoring and anomaly detection platform
-built with AWS managed services, Python, and a React SOC-style
-dashboard.
+**A cloud-native network monitoring and machine-learning anomaly detection platform built on AWS.**
 
-The system ingests generated network events, aggregates them into time
-windows, scores finalized windows with an Amazon SageMaker Random Cut
-Forest (RCF) model, and exposes the results through a REST API for
-dashboard visualization.
+[![AWS](https://img.shields.io/badge/Cloud-AWS-orange?logo=amazonaws&logoColor=white)](https://aws.amazon.com/)
+[![Python](https://img.shields.io/badge/Backend-Python-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![React](https://img.shields.io/badge/Frontend-React-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Build-Vite-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
+[![Region](https://img.shields.io/badge/AWS%20Region-ap--southeast--1-blue)](https://aws.amazon.com/about-aws/global-infrastructure/)
 
-> **Project status:** End-to-end ingestion, aggregation, scheduled
-> finalization, SageMaker inference, API retrieval, and dashboard
-> deployment have been implemented and tested. This repository documents
-> the current implementation, not a production-certified intrusion
-> detection system.
+[Architecture](#architecture) · [Screenshots](#screenshots) · [How it works](#how-it-works) · [Validation](#validation-results) · [Documentation](#project-documentation)
 
-## Dashboard and architecture
+</div>
+
+---
+
+## Overview
+
+AWS Network Anomaly Detection is an end-to-end cloud project that ingests generated network events, aggregates activity into time windows, and uses **Amazon SageMaker Random Cut Forest (RCF)** to score potentially unusual traffic patterns.
+
+The scored results are stored in Amazon DynamoDB and exposed through an API Gateway REST API. A React-based Security Operations Center (SOC)-style dashboard, hosted on AWS Amplify, presents traffic metrics and anomaly classifications.
+
+> **Project scope:** This is a portfolio-scale implementation tested with generated traffic. It demonstrates an end-to-end anomaly-scoring workflow; it is not a production-certified intrusion detection system and does not automatically block network traffic.
+
+### Project highlights
+
+- Streaming event ingestion with Amazon Kinesis Data Streams.
+- Serverless processing and time-window aggregation with AWS Lambda and DynamoDB.
+- Scheduled window finalization using Amazon EventBridge Scheduler.
+- Unsupervised anomaly scoring with Amazon SageMaker Random Cut Forest.
+- REST API integration using Amazon API Gateway and Lambda.
+- React SOC-style dashboard deployed through AWS Amplify.
+- Normal-traffic and simulated port-scan test scenarios.
+
+## Screenshots
 
 ### SOC dashboard
 
-![SOC dashboard overview](screenshots/dashboard-overview-01.png)
+<div align="center">
 
-![SOC dashboard overview - additional
-view](screenshots/dashboard-overview-02.png)
+<img src="screenshots/dashboard-overview-01.png" alt="SOC dashboard overview" width="100%">
 
-### Detected threats
+*Dashboard overview*
 
-![Detected threats](screenshots/detected-threats.png)
+<img src="screenshots/dashboard-overview-02.png" alt="SOC dashboard additional view" width="100%">
 
-### Event details
+*Additional dashboard view*
 
-![Event details](screenshots/event-details.png)
+</div>
 
-### AWS architecture
+### Detection and investigation
 
-![AWS architecture](screenshots/aws-architecture.png)
+| Detected threats | Event details |
+|---|---|
+| ![Detected threats](screenshots/detected-threats.png) | ![Event details](screenshots/event-details.png) |
 
-### Port scan test
+### Live test
 
 ![Live port scan test from CLI](screenshots/live-port-scan-test-cli.png)
 
-## 1. Project objectives
+*CLI output from the simulated port-scan traffic test.*
 
--   Ingest network traffic events through a streaming service.
--   Process events with serverless compute.
--   Aggregate network activity into time-based windows.
--   Apply unsupervised machine learning to identify unusual traffic
-    patterns.
--   Store scored results and expose them through an API.
--   Visualize network activity and anomaly classifications in a web
-    dashboard.
--   Demonstrate practical skills across networking, AWS, serverless
-    architecture, data engineering, and cloud security.
+## Architecture
 
-## 2. Architecture at a glance
+![AWS architecture](screenshots/aws-architecture.png)
 
-``` mermaid
+### End-to-end data flow
+
+```mermaid
 flowchart LR
-    A["Python traffic generator"] --> B["Kinesis Data Streams"]
+    A["Python traffic generator"] --> B["Amazon Kinesis Data Streams"]
     B --> C["Lambda: Kinesis consumer"]
-    C --> D[("DynamoDB aggregation table")]
+    C --> D[("Amazon DynamoDB<br/>Aggregation table")]
 
-    E["EventBridge Scheduler<br/>rate: 1 minute"] --> F["Lambda: window finalizer"]
+    E["EventBridge Scheduler<br/>Every minute"] --> F["Lambda: Window finalizer"]
     F --> D
 
     D --> G["DynamoDB Streams"]
-    G --> H["Lambda: anomaly scorer"]
-    H --> I["SageMaker RCF endpoint"]
+    G --> H["Lambda: Anomaly scorer"]
+    H --> I["Amazon SageMaker<br/>Random Cut Forest"]
     I --> H
     H --> D
 
     D --> J["Lambda: API"]
-    J --> K["API Gateway REST API"]
-    K <--> L["React dashboard<br/>hosted by Amplify"]
+    J --> K["Amazon API Gateway"]
+    K <--> L["React dashboard<br/>AWS Amplify"]
 ```
 
-**Processing sequence:**
+### AWS services
 
-1.  A Python traffic generator publishes events to Amazon Kinesis Data
-    Streams.
-2.  The Kinesis consumer Lambda processes events and updates time-window
-    aggregation records in DynamoDB.
-3.  EventBridge Scheduler invokes the window-finalizer Lambda once per
-    minute.
-4.  The finalizer marks eligible windows as `FINALIZED`.
-5.  DynamoDB Streams invokes the anomaly-scorer Lambda for relevant
-    record changes.
-6.  The scorer transforms the aggregation metrics into the model's
-    10-feature input and invokes the SageMaker RCF endpoint.
-7.  The scorer compares the returned score with the configured threshold
-    and writes the score, classification, and model version to DynamoDB.
-8.  The API Lambda reads finalized records from DynamoDB and returns
-    JSON through API Gateway.
-9.  The React dashboard, hosted by AWS Amplify, calls the API and
-    displays the returned data.
+| Layer | Service | Responsibility |
+|---|---|---|
+| Event generation | Python traffic generator | Produces normal and simulated suspicious network events |
+| Ingestion | Amazon Kinesis Data Streams | Receives streaming traffic events |
+| Stream processing | AWS Lambda — Kinesis consumer | Decodes, validates, deduplicates, and aggregates events |
+| Data store | Amazon DynamoDB | Stores traffic windows and processing metadata |
+| Scheduling | Amazon EventBridge Scheduler | Triggers periodic window finalization |
+| Window management | AWS Lambda — window finalizer | Finalizes eligible aggregation windows |
+| Change notification | DynamoDB Streams | Publishes changes to DynamoDB records |
+| Inference orchestration | AWS Lambda — anomaly scorer | Builds model features, invokes SageMaker, and classifies scores |
+| Machine learning | Amazon SageMaker Random Cut Forest | Produces anomaly scores |
+| API | AWS Lambda and Amazon API Gateway | Retrieves and exposes scored records |
+| Frontend hosting | AWS Amplify | Hosts the React application |
+| User interface | React and Vite | Displays traffic and detection results |
 
-See [EXPLANATION.md](EXPLANATION.md) for component responsibilities and
-the data lifecycle, and [DEPLOYMENT.md](DEPLOYMENT.md) for deployment
-notes.
+## How it works
 
-## 3. AWS services and responsibilities
+1. **Generate events.** A Python traffic generator creates network events containing source and destination IPs, destination port, protocol, connection outcome, byte counts, timestamp, and a unique event ID.
+2. **Ingest the stream.** Amazon Kinesis Data Streams receives the generated records.
+3. **Process and aggregate.** The Kinesis consumer Lambda processes records and updates time-window aggregation items in DynamoDB. Event IDs and deduplication records help prevent replayed events from being counted more than once.
+4. **Finalize windows.** EventBridge Scheduler invokes the window-finalizer Lambda every minute. The finalizer identifies eligible windows, marks them `FINALIZED`, and removes temporary open-window index attributes.
+5. **Trigger inference.** DynamoDB Streams delivers relevant record changes to the anomaly-scorer Lambda.
+6. **Calculate an anomaly score.** The scorer transforms the aggregation into the model's 10-feature input and invokes the SageMaker endpoint.
+7. **Classify and store.** The scorer compares the returned score with the configured threshold and writes the score, classification, and model version to DynamoDB.
+8. **Serve results.** The API Lambda retrieves finalized records and returns JSON through API Gateway.
+9. **Visualize.** The React dashboard, hosted by AWS Amplify, calls the API and displays the returned data.
 
-  -----------------------------------------------------------------------
-  Layer                   Service / component     Responsibility
-  ----------------------- ----------------------- -----------------------
-  Event source            Python traffic          Creates normal and
-                          generator               simulated suspicious
-                                                  network events
+For a deeper component-by-component explanation, see [EXPLANATION.md](EXPLANATION.md).
 
-  Ingestion               Amazon Kinesis Data     Receives streaming
-                          Streams                 events
+## Implementation details
 
-  Stream processing       AWS Lambda - Kinesis    Decodes, validates,
-                          consumer                deduplicates, and
-                                                  aggregates events
+### Traffic ingestion and aggregation
 
-  Aggregation store       Amazon DynamoDB         Stores traffic windows
-                                                  and processing metadata
+**Kinesis stream:** `network-traffic-stream-v3`
 
-  Scheduling              Amazon EventBridge      Triggers periodic
-                          Scheduler               window finalization
+| Setting | Value |
+|---|---|
+| AWS Region | `ap-southeast-1` |
+| Capacity mode | On-demand |
+| Retention period | 24 hours |
+| Configured shards | 4 |
 
-  Window management       AWS Lambda - window     Finalizes eligible
-                          finalizer               aggregation windows
+**DynamoDB table:** `network-anomaly-aggregation-v3`
 
-  Change notification     DynamoDB Streams        Announces changes to
-                                                  DynamoDB records
+The consumer aggregates:
+- Total connections.
+- Unique destination IP addresses and destination ports.
+- TCP and UDP connection counts.
+- Failed connection counts.
+- Bytes sent and received.
 
-  Inference orchestration AWS Lambda - anomaly    Builds model features,
-                          scorer                  invokes SageMaker, and
-                                                  classifies scores
+The table uses the `GSI1-OpenWindowsByFinalizeAt` index to locate open windows that are ready for finalization. It is configured with on-demand billing, TTL for eligible records, and deletion protection.
 
-  ML inference            Amazon SageMaker Random Produces anomaly scores
-                          Cut Forest              
+### Machine-learning model
 
-  API                     AWS Lambda - API and    Retrieves and exposes
-                          Amazon API Gateway      scored records
+The project uses the built-in Amazon SageMaker **Random Cut Forest** algorithm for unsupervised anomaly scoring.
 
-  Frontend hosting        AWS Amplify             Hosts the React
-                                                  application
+| Parameter | Implemented configuration |
+|---|---|
+| Model version label | `rcf-v3` |
+| Feature dimension | 10 |
+| Number of trees | 100 |
+| Samples per tree | 256 |
+| Training instance | `ml.m5.large` |
+| Inference endpoint | `network-anomaly-rcf-v3-serverless-endpoint` |
+| Serverless memory | 2048 MB |
+| Maximum concurrency | 1 |
+| Classification threshold | `2.980612` |
 
-  Frontend                React and Vite          Displays traffic and
-                                                  detection results
-  -----------------------------------------------------------------------
+The model input contains these ten features, in this order:
 
-## 4. Main implementation details
-
-### Network event ingestion
-
-The Python traffic generator publishes event records to:
-
--   **Kinesis stream:** `network-traffic-stream-v3`
--   **AWS Region:** `ap-southeast-1`
--   **Capacity mode:** On-demand
--   **Retention:** 24 hours
--   **Configured shards:** 4
-
-The generated events include network attributes such as source and
-destination IP addresses, destination port, protocol, connection
-outcome, byte counts, timestamp, and a unique event identifier.
-
-### Aggregation and idempotency
-
-The Kinesis consumer aggregates traffic into time-based windows in:
-
--   **DynamoDB table:** `network-anomaly-aggregation-v3`
--   **GSI:** `GSI1-OpenWindowsByFinalizeAt`
-
-The aggregation includes total connections, unique destination IPs and
-ports, TCP/UDP counts, failed connections, and bytes sent/received.
-
-The consumer uses event identifiers and deduplication records to prevent
-replayed events from being counted more than once. The table uses
-on-demand billing, TTL for eligible records, and deletion protection.
-
-### Scheduled finalization
-
-EventBridge Scheduler invokes `network-anomaly-window-finalizer` on a
-one-minute schedule. The finalizer queries eligible open windows using
-the GSI, marks expired windows as `FINALIZED`, and removes the temporary
-GSI attributes used to track open windows.
-
-### Machine learning
-
-The project uses the built-in Amazon SageMaker Random Cut Forest
-algorithm for unsupervised anomaly scoring.
-
-  Setting                    Implemented value
-  -------------------------- ----------------------------------------------
-  Model version label        `rcf-v3`
-  Feature dimension          10
-  Number of trees            100
-  Samples per tree           256
-  Training instance          `ml.m5.large`
-  Inference endpoint         `network-anomaly-rcf-v3-serverless-endpoint`
-  Serverless memory          2048 MB
-  Maximum concurrency        1
-  Classification threshold   `2.980612`
-
-The scorer uses the same feature order and transformation logic as the
-model's training data:
-
-1.  `total_connections`
-2.  `unique_destination_ips`
-3.  `unique_destination_ports`
-4.  `log_bytes_sent`
-5.  `log_bytes_received`
-6.  `failed_connection_rate`
-7.  `destination_ip_ratio`
-8.  `destination_port_ratio`
-9.  `udp_ratio`
+1. `total_connections`
+2. `unique_destination_ips`
+3. `unique_destination_ports`
+4. `log_bytes_sent`
+5. `log_bytes_received`
+6. `failed_connection_rate`
+7. `destination_ip_ratio`
+8. `destination_port_ratio`
+9. `udp_ratio`
 10. `log_failed_connections`
 
-The scorer labels a record `ANOMALY` when its score is greater than
-`2.980612`; otherwise it labels it `NORMAL`. This threshold is the
-configured decision boundary for this project, not a universal RCF
-threshold.
+The scorer applies the same feature order and transformation logic used during model training.
+
+**Classification rule**
+
+| Condition | Classification |
+|---|---|
+| Anomaly score > `2.980612` | `ANOMALY` |
+| Anomaly score <= `2.980612` | `NORMAL` |
+
+The threshold is a project-specific decision boundary based on the model validation work. It is not a universal Random Cut Forest threshold and should be re-evaluated if the model, features, or traffic distribution changes.
 
 ### API and dashboard
 
-The API is exposed through API Gateway:
+The API is exposed through Amazon API Gateway:
 
--   **Method:** `GET`
--   **Resource:** `/network-traffic`
--   **Stage:** `prod`
--   **Region:** `ap-southeast-1`
+| Setting | Value |
+|---|---|
+| Method | `GET` |
+| Resource | `/network-traffic` |
+| Stage | `prod` |
+| Region | `ap-southeast-1` |
 
 Example request:
 
-``` text
+```text
 https://cyym8ywtvj.execute-api.ap-southeast-1.amazonaws.com/prod/network-traffic?limit=100
 ```
 
-The API supports a record limit and source-IP filtering. The current
-global retrieval implementation uses a bounded DynamoDB Scan with
-filtering and may return fewer records than the requested limit. It is
-suitable for this portfolio-scale implementation; a production-scale
-system should use purpose-built query indexes and pagination.
+The API supports a result limit and source-IP filtering. The current global retrieval implementation uses a bounded DynamoDB Scan with filtering, so it may return fewer records than the requested limit. This is suitable for the current portfolio-scale implementation; a larger production system should use query-optimized indexes and pagination.
 
-The frontend is a React/Vite application hosted by AWS Amplify. It calls
-the API using the build-time `VITE_API_URL` environment variable. The
-browser frontend does not access DynamoDB or SageMaker directly.
+The React/Vite frontend is hosted by AWS Amplify and uses the build-time `VITE_API_URL` environment variable. The browser application does not access DynamoDB or SageMaker directly.
 
-## 5. Validation results
+## Validation results
 
-The end-to-end pipeline was tested with normal traffic and a simulated
-port scan.
+The end-to-end pipeline was tested with a normal traffic sample and a simulated port scan.
 
-### Normal traffic sample
+### Normal traffic
 
-  Attribute           Observed value
-  ---------------- -----------------
-  Source IP          `192.168.1.250`
-  Anomaly score       `0.7437485975`
-  Threshold               `2.980612`
-  Classification            `NORMAL`
+| Attribute | Observed result |
+|---|---:|
+| Source IP | `192.168.1.250` |
+| Anomaly score | `0.7437485975` |
+| Threshold | `2.980612` |
+| Classification | **NORMAL** |
 
-### Simulated port scan sample
+### Simulated port scan
 
-The test generated 30 TCP events from `192.168.1.210` to `10.0.5.10`,
-covering 30 unique destination ports with failed connections.
+The test generated 30 TCP events from `192.168.1.210` to `10.0.5.10`, using 30 unique destination ports with failed connection outcomes.
 
-  Attribute                     Observed value
-  -------------------------- -----------------
-  Source IP                    `192.168.1.210`
-  Destination IP                   `10.0.5.10`
-  Total connections                         30
-  Unique destination ports                  30
-  Failed connections                        30
-  Anomaly score                 `6.9276060125`
-  Threshold                         `2.980612`
-  Classification                     `ANOMALY`
+| Attribute | Observed result |
+|---|---:|
+| Source IP | `192.168.1.210` |
+| Destination IP | `10.0.5.10` |
+| Total connections | 30 |
+| Unique destination ports | 30 |
+| Failed connections | 30 |
+| Anomaly score | `6.9276060125` |
+| Threshold | `2.980612` |
+| Classification | **ANOMALY** |
 
-These are observed results from the project's test events. They
-demonstrate that the configured pipeline distinguished these two test
-cases; they should not be interpreted as proof of detection accuracy
-across all real-world network traffic.
+The port-scan score exceeded the configured threshold and the window was classified as anomalous.
 
-Additional checks included Kinesis processing, duplicate-event handling,
-DynamoDB aggregation, scheduled finalization, SageMaker endpoint
-invocation, DynamoDB Streams processing, API HTTP 200 response, frontend
-API integration, frontend production build, and GitHub push.
+> These are observed results from the project's test events. They demonstrate the behavior of the configured pipeline for these scenarios; they do not establish detection accuracy across all real-world network traffic.
 
-## 6. Repository structure
+Additional validation covered Kinesis processing, duplicate-event handling, DynamoDB aggregation, scheduled finalization, SageMaker endpoint invocation, DynamoDB Streams processing, API HTTP 200 response, frontend API integration, frontend production build, and GitHub deployment.
 
-``` text
+## Repository structure
+
+```text
 AWS-Network-Anomaly-Detection/
 ├── frontend/                 # React + Vite dashboard
 ├── lambda/                   # Lambda function source code
-├── traffic-generator/        # Traffic event generators and test publishers
-├── model-artifacts/          # Local model-related artifacts / test outputs
-├── screenshots/              # Project screenshots used by this README
+├── traffic-generator/        # Traffic generators and test publishers
+├── model-artifacts/          # Local model-related artifacts and test outputs
+├── screenshots/              # README screenshots
 ├── README.md
 ├── DEPLOYMENT.md
 ├── EXPLANATION.md
 └── .gitignore
 ```
 
-The exact contents may evolve as the project is extended. Do not commit
-virtual environments, `node_modules`, build output, credentials, private
-keys, or local environment files.
+The exact contents may evolve as the project is extended. Virtual environments, `node_modules`, build output, credentials, private keys, and local environment files should not be committed.
 
-## 7. Security considerations
+## Project documentation
 
--   Use separate IAM roles for individual Lambda functions and grant
-    only the permissions each function needs.
--   Do not commit AWS access keys, secret keys, session tokens, `.env`
-    files, or local credential files.
--   Keep frontend configuration limited to non-secret values. A Vite
-    variable such as `VITE_API_URL` is embedded in browser code and must
-    never contain a secret.
--   The current API endpoint has no user authentication. Add an
-    appropriate authorizer and access controls before exposing sensitive
-    or production data.
--   Review CORS settings and restrict allowed origins to the deployed
-    frontend where practical.
--   Protect logs and screenshots from exposing sensitive network
-    information.
--   Review DynamoDB deletion protection and backup requirements before
-    changing data-retention settings.
+| Document | Description |
+|---|---|
+| [Deployment guide](DEPLOYMENT.md) | AWS resources, configuration, deployment order, and verification |
+| [Technical explanation](EXPLANATION.md) | Architecture, data lifecycle, model scoring, and component responsibilities |
 
-## 8. Cost considerations
+## Security considerations
 
-The implementation uses managed and serverless services, but AWS
-resources can continue to incur charges while deployed.
+- Use separate IAM roles for individual Lambda functions and grant only the permissions each function requires.
+- Never commit AWS access keys, secret keys, session tokens, `.env` files, or local credential files.
+- Treat `VITE_API_URL` as public configuration. Vite embeds `VITE_` variables in browser code; never put secrets in them.
+- The current API endpoint does not have user authentication. Add an appropriate authorizer and access controls before exposing sensitive or production data.
+- Review CORS settings and restrict allowed origins to the deployed frontend where practical.
+- Avoid exposing sensitive network information in logs and screenshots.
+- Review DynamoDB deletion protection, backups, and data-retention requirements before changing them.
 
-Cost-conscious settings include Kinesis on-demand mode, DynamoDB
-on-demand billing, Lambda-based processing, and SageMaker Serverless
-Inference with no provisioned concurrency. Training jobs, endpoint
-invocations, data transfer, logs, storage, and other resources may still
-incur charges.
+## Cost considerations
 
-Check AWS Billing and Cost Management regularly. Do not assume that an
-idle project is completely free. When finished experimenting, follow a
-deliberate resource shutdown plan and preserve any artifacts needed for
-the portfolio.
+The project uses managed and serverless services, but deployed AWS resources can continue to incur charges.
 
-## 9. Limitations and future improvements
+Cost-conscious choices include Kinesis on-demand capacity, DynamoDB on-demand billing, Lambda-based processing, and SageMaker Serverless Inference without provisioned concurrency. Training jobs, endpoint invocations, data transfer, logs, storage, and other resources may still incur charges.
 
-Potential next improvements:
+Monitor AWS Billing and Cost Management. An idle project is not necessarily free. When the live environment is no longer needed, follow a deliberate cleanup process while preserving local source code, screenshots, and required model artifacts.
 
-1.  Add API authentication and authorization.
-2.  Add pagination and query-optimized DynamoDB indexes for larger
-    datasets.
-3.  Add operational alarms and dashboards in Amazon CloudWatch.
-4.  Add notification workflows for high-priority detections.
-5.  Add a real-time dashboard update mechanism.
-6.  Expand testing with more representative normal and suspicious
-    traffic.
-7.  Establish a repeatable model evaluation and retraining process.
-8.  Add infrastructure as code for reproducible deployment.
-9.  Add automated tests and CI/CD checks.
-10. Extend dashboard navigation and investigation workflows.
+## Limitations and future improvements
 
-## 10. Technology stack
+- Add authentication and authorization to the API and dashboard.
+- Add pagination and query-optimized DynamoDB indexes for larger datasets.
+- Add CloudWatch operational alarms and dashboards.
+- Add notification workflows for high-priority detections.
+- Add real-time dashboard updates.
+- Expand testing with more representative normal and suspicious traffic.
+- Establish repeatable model evaluation, retraining, and threshold review.
+- Provision infrastructure using AWS CDK, CloudFormation, or Terraform.
+- Add automated tests and CI/CD quality checks.
+- Extend dashboard navigation and investigation workflows.
 
-**Languages and frontend:** Python, JavaScript, React, Vite, CSS\
-**AWS:** Amazon Kinesis Data Streams, AWS Lambda, Amazon DynamoDB,
-Amazon EventBridge Scheduler, Amazon SageMaker, Amazon API Gateway, AWS
-Amplify, AWS IAM, Amazon CloudWatch\
+## Technology stack
+
+**Languages and frontend:** Python, JavaScript, React, Vite, CSS  
+**AWS:** Amazon Kinesis Data Streams, AWS Lambda, Amazon DynamoDB, Amazon EventBridge Scheduler, Amazon SageMaker, Amazon API Gateway, AWS Amplify, AWS IAM, Amazon CloudWatch  
 **Version control:** Git and GitHub
 
-## 11. Repository
+## Repository
 
-[GitHub - AWS Network Anomaly
-Detection](https://github.com/bryanwork6099/AWS-Network-Anomaly-Detection)
+[**AWS-Network-Anomaly-Detection on GitHub**](https://github.com/bryanwork6099/AWS-Network-Anomaly-Detection)
+
+---
+
+<div align="center">
+
+*Built as a hands-on cloud engineering and security portfolio project.*
+
+</div>
