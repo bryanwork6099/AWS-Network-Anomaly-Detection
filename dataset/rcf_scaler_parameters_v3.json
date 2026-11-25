@@ -1,0 +1,52 @@
+{
+    "total_connections": {
+        "mean": 2.0002829654782115,
+        "scale": 0.8194683935305673,
+        "standardized": true
+    },
+    "unique_destination_ips": {
+        "mean": 1.9090137366877604,
+        "scale": 0.7949327218545988,
+        "standardized": true
+    },
+    "unique_destination_ports": {
+        "mean": 1.650331841333539,
+        "scale": 0.6635072157597085,
+        "standardized": true
+    },
+    "log_bytes_sent": {
+        "mean": 8.381849036464663,
+        "scale": 1.537934140380285,
+        "standardized": true
+    },
+    "log_bytes_received": {
+        "mean": 9.656914458563442,
+        "scale": 1.7707316740105103,
+        "standardized": true
+    },
+    "failed_connection_rate": {
+        "mean": 0.0,
+        "scale": 1.0,
+        "standardized": false
+    },
+    "destination_ip_ratio": {
+        "mean": 0.9655510967055958,
+        "scale": 0.11662365770085238,
+        "standardized": true
+    },
+    "destination_port_ratio": {
+        "mean": 0.8680180411929138,
+        "scale": 0.20141667736997096,
+        "standardized": true
+    },
+    "udp_ratio": {
+        "mean": 0.24802781636397936,
+        "scale": 0.3385752714116792,
+        "standardized": true
+    },
+    "log_failed_connections": {
+        "mean": 0.0,
+        "scale": 1.0,
+        "standardized": false
+    }
+}
